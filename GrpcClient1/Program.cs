@@ -29,7 +29,7 @@ namespace GrpcClient1
         {
             int count = 45000;
             int mod = count / 10;
-            int iters = 1;
+            int iters = 3;
 
             Console.WriteLine($"Server: {GCSettings.IsServerGC}");
 
@@ -49,9 +49,11 @@ namespace GrpcClient1
             //        //}
             //    });
 
+
+
+            //single thread, single channel grpc
             List<Task> tasks = new List<Task>();
 
-            //for(int z =0; z<iters; z++)
             {
                 var t = Task.Run(async () =>
                 {
@@ -79,8 +81,45 @@ namespace GrpcClient1
             sw.Stop();
             Console.WriteLine($"Grpc {count} in {sw.ElapsedMilliseconds}ms {sw.ElapsedMilliseconds / 1000}s  each {(sw.ElapsedMilliseconds * 1000) / count}us");
 
-            //return;
 
+            sw.Reset();
+            sw.Start();
+
+            //single channel multiple thread grpc
+            List<Task> tasks3 = new List<Task>();
+
+            using var channel = GrpcChannel.ForAddress("http://10.0.0.218:5070",
+                        new GrpcChannelOptions
+                        {
+                            Credentials = ChannelCredentials.Insecure
+                        });
+
+            for (int z = 0; z < iters; z++)
+            {
+                var t = Task.Run(async () =>
+                {
+                    var client = new Greeter.GreeterClient(channel);
+                    
+                    for (int i = 0; i < count; i++)
+                    {
+                        var reply = await client.SayHelloAsync(new HelloRequest { Name = $"GreeterClientGrpc{i}" });
+
+                        if (i % mod == 0)
+                            Console.WriteLine("Greeting: " + reply.Message);
+                    }
+                });
+
+                tasks3.Add(t);
+            }
+
+            Task.WaitAll(tasks3.ToArray());
+
+            sw.Stop();
+            Console.WriteLine($"Grpc concurrent {count} in {sw.ElapsedMilliseconds}ms {sw.ElapsedMilliseconds / 1000}s  each {(sw.ElapsedMilliseconds * 1000) / count}us");
+
+
+
+            //rest with multiple threads
             JsonSerializerOptions jso = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
             sw.Reset();
@@ -88,7 +127,7 @@ namespace GrpcClient1
 
             List<Task> tasks2 = new List<Task>();
 
-            //for (int z = 0; z < iters; z++)
+            for (int z = 0; z < iters; z++)
             {
                 var t = Task.Run(async () =>
                 {
